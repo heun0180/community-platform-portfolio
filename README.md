@@ -27,21 +27,30 @@
 - 이메일 가입·로그인과 이메일 인증
 - Discord 로그인 및 기존 계정과 Discord 계정 연결
 - 비공개 커뮤니티 생성, 커뮤니티당 게임 선택
-- 관리자 승인 기반 가입과 OWNER / ADMIN / MEMBER 권한 구분
+- 초대·가입 신청과 운영진 승인, OWNER / ADMIN / MEMBER 권한 구분
+- 회원 상태·권한 관리와 가입·탈퇴 이력 조회
 
 ### Discord 연동
 
 - Discord 서버 연결과 클랜원·역할 정보 동기화
 - 로그인 계정과 클랜원 정보의 Discord ID를 비교해 회원 연결
 - 기존 운영진 권한이나 탈퇴·추방 이력이 자동 연결로 변경되지 않도록 처리
+- 클랜원 입퇴장·역할·닉네임 변경 반영과 음성 채널 접속 시간 조회
 
-### 게임 활동 관리
+### 게임 활동과 이벤트
 
-- PUBG Kakao와 Steam을 구분하는 연동 구조
-- Discord 표시명에서 게임 닉네임을 추출하는 규칙 검토
-- 경기 기록을 이용한 활동 판정과 게임별 관리 기능 확장
+- PUBG Kakao·Steam 구분, Discord 표시명에서 게임 닉네임을 추출하는 규칙과 미리보기
+- 운영진이 정한 기간·인원·경기 수를 기준으로 클랜원 활동 조회
+- 킬내기 개인전·팀전의 경기 집계와 순위·보상 처리
+- PUBG 경기 기록으로 빙고 미션을 판정하고, 미션에 따라 봇 처치를 제외
 
-게임 연동과 활동 관리 중 일부는 현재 개발 중이며, 기존 GuildUp에서 사용하던 기능을 그대로 완료된 것으로 표기하지 않았습니다.
+### 랭킹과 커뮤니티 운영
+
+- 커뮤니티별 월간·누적 랭킹과 킬내기 우승 보상
+- 운영진 공지 작성·고정, 회원의 새 공지 확인
+- 웹 출석체크와 하루 한 번 랭킹 1점 지급
+
+Discord 실시간 반영·음성 활동·회원 이름 표시 설정·공지·출석체크는 로컬 개발 버전에 구현했습니다. 확인한 환경과 남은 작업은 [테스트와 남은 작업](docs/05-validation.md)에 정리했습니다.
 
 [기능별 구현 내용](docs/02-features.md)
 
@@ -50,10 +59,10 @@
 | 구분 | 기술 |
 | --- | --- |
 | Backend | Java 21, Spring Boot, Spring Security, JPA |
-| Database | PostgreSQL |
+| Database | PostgreSQL, Flyway |
 | Frontend | React, TypeScript, Vite |
 | Integration | Discord OAuth2, Discord Bot(JDA), PUBG API |
-| Architecture | 모듈러 모놀리스 방향, Spring Modulith 검토 |
+| Architecture | 모듈러 모놀리스, Spring Modulith 모듈 경계 검증 |
 | Documentation | Markdown, Obsidian |
 
 ## 구조
@@ -66,9 +75,14 @@ flowchart LR
     Community --> DB[("PostgreSQL")]
     Auth --> DB
     Community --> Discord["Discord 연동"]
-    Community --> Game["게임별 연동"]
-    Discord --> DiscordAPI["Discord OAuth / Bot"]
+    Community --> Game["PUBG 활동·이벤트"]
+    Community --> Ranking["랭킹"]
+    Auth --> DiscordAPI["Discord OAuth / Bot"]
+    Discord --> DiscordAPI
     Game --> PUBG["PUBG Kakao / Steam"]
+    Game --> DB
+    Game --> Ranking
+    Ranking --> DB
 ```
 
 커뮤니티 회원과 Discord 클랜원을 같은 개념으로 취급하지 않았습니다. 서비스 가입 여부, Discord 서버 소속, 클랜 활동 상태는 서로 다르기 때문입니다. 특히 자동 회원 연결은 닉네임이 아닌 Discord 사용자 ID를 기준으로 처리합니다.
@@ -89,6 +103,10 @@ Discord 표시명은 누구나 변경할 수 있고 중복될 수도 있습니�
 
 기존 GuildUp에서 추방 요청이 취소된 상황과 결과를 확인할 수 없는 상황을 구분하는 작업을 했습니다. 같은 요청을 무조건 재시도하면 중복 조치가 생길 수 있어, 새 프로젝트에서도 실행 상태와 승인 과정을 별도로 다루려고 합니다.
 
+**4. 킬내기에 필요한 경기만 가져올 수 있을까?**
+
+PUBG API에서 참가자의 경기 목록을 날짜로 좁힐 수 없었습니다. 대회 시작보다 오래된 경기를 만나면 몇 경기를 더 확인하고 조회를 멈추도록 했습니다. 그 사이에 집계 대상 경기가 다시 나오면 해당 참가자의 목록을 끝까지 확인합니다.
+
 [문제 해결 기록 자세히 보기](docs/03-troubleshooting.md)
 
 ## 개발 기록
@@ -98,5 +116,3 @@ Discord 표시명은 누구나 변경할 수 있고 중복될 수도 있습니�
 - [문제 해결 과정](docs/03-troubleshooting.md)
 - [기술 선택과 설계 고민](docs/04-decisions.md)
 - [테스트 및 남은 작업](docs/05-validation.md)
-
-현재는 인증·커뮤니티·Discord 연동을 중심으로 개발하고 있습니다. 게임별 활동 집계와 운영 자동화는 실제 데이터를 연결하고 검증하면서 확장할 계획입니다.
